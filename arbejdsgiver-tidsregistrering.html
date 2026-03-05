@@ -283,8 +283,6 @@ document.getElementById('loginPass').addEventListener('keydown',function(e){if(e
 
 function initApp(){
   populateAllPeriods();
-  populateEmpSelectors();
-  renderEmployees();
   loadSettings();
   subscribeAll();
 }
@@ -329,9 +327,15 @@ function renderLiveDashboard(){
   var emps=getEmployees();
   var now=new Date();
   var today=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate());
+
+  // Byg et sæt af aktive brugernavne
+  var activeUsernames={};
+  for(var i=0;i<emps.length;i++)activeUsernames[emps[i].username]=true;
+
   var checkedInCount=0,missedCount=0;
-  var todayEntries=allEntries.filter(function(e){return e.date===today;});
-  var pendingTotal=allEntries.filter(function(e){return!e.approved;}).length;
+  // Filtrér kun aktive medarbejdere i dagens registreringer
+  var todayEntries=allEntries.filter(function(e){return e.date===today&&activeUsernames[e.username];});
+  var pendingTotal=allEntries.filter(function(e){return!e.approved&&activeUsernames[e.username];}).length;
   var todayH=todayEntries.filter(function(e){return e.type==='normal';}).reduce(function(s,e){return s+e.hours;},0);
 
   var cardsHtml='';
@@ -362,7 +366,7 @@ function renderLiveDashboard(){
     '<div class="stat-card"><div class="stat-icon">⏱</div><div class="stat-val">'+todayH.toFixed(1)+'t</div><div class="stat-lbl">Arbejdstimer i dag</div></div>'+
     '<div class="stat-card"><div class="stat-icon">'+(missedCount>0?'⚠️':'✅')+'</div><div class="stat-val">'+missedCount+'</div><div class="stat-lbl">Glemt udtjekning</div></div>';
 
-  document.getElementById('liveCards').innerHTML=cardsHtml||'<p style="color:#9ca3af;font-size:14px">Ingen medarbejdere.</p>';
+  document.getElementById('liveCards').innerHTML=cardsHtml||'<p style="color:#9ca3af;font-size:14px">Ingen medarbejdere endnu.</p>';
 
   var typeLabel={normal:'Arbejde',ferie:'Ferie',feriefri:'Feriefri',friuden:'Fri u. løn',fravoer:'Fravær'};
   var rows=todayEntries.sort(function(a,b){return(a.start||'').localeCompare(b.start||'');}).map(function(e){

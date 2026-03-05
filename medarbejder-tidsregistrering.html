@@ -606,7 +606,7 @@ function showToast(msg){var t=document.getElementById('toast');t.textContent=msg
 // ── PWA Service Worker ────────────────────────────────────
 if('serviceWorker' in navigator){
   window.addEventListener('load', function(){
-    navigator.serviceWorker.register('sw.js').catch(function(e){console.log('SW fejl:',e);});
+    navigator.serviceWorker.register('sw.js', {scope: './'}).catch(function(e){console.log('SW fejl:',e);});
   });
 }
 </script>

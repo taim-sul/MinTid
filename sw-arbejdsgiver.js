@@ -1,21 +1,27 @@
-var CACHE = 'pilot-admin-v1';
-var FILES = [
-  '/Pilot-tidsregistrering/arbejdsgiver-tidsregistrering-3.html',
-  '/Pilot-tidsregistrering/manifest-arbejdsgiver.json'
-];
+var CACHE = 'pilot-admin-v4';
 
 self.addEventListener('install', function(e) {
-  e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(FILES);}));
   self.skipWaiting();
 });
 
 self.addEventListener('activate', function(e) {
-  e.waitUntil(caches.keys().then(function(keys){
-    return Promise.all(keys.filter(function(k){return k!==CACHE;}).map(function(k){return caches.delete(k);}));
-  }));
+  e.waitUntil(
+    caches.keys().then(function(keys){
+      return Promise.all(keys.filter(function(k){return k!==CACHE;}).map(function(k){return caches.delete(k);}));
+    })
+  );
   self.clients.claim();
 });
 
 self.addEventListener('fetch', function(e) {
-  e.respondWith(fetch(e.request).catch(function(){return caches.match(e.request);}));
+  if(e.request.method !== 'GET') return;
+  e.respondWith(
+    fetch(e.request).then(function(response){
+      var clone = response.clone();
+      caches.open(CACHE).then(function(cache){ cache.put(e.request, clone); });
+      return response;
+    }).catch(function(){
+      return caches.match(e.request);
+    })
+  );
 });

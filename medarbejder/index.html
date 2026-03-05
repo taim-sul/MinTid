@@ -606,10 +606,7 @@ function showToast(msg){var t=document.getElementById('toast');t.textContent=msg
 // ── PWA Service Worker ────────────────────────────────────
 if('serviceWorker' in navigator){
   window.addEventListener('load', function(){
-    navigator.serviceWorker.register('sw.js', {scope: '/Pilot-tidsregistrering/medarbejder-tidsregistrering.html'}).catch(function(e){
-      // Fallback uden scope
-      navigator.serviceWorker.register('sw.js').catch(function(e2){console.log('SW fejl:',e2);});
-    });
+    navigator.serviceWorker.register('sw.js', {scope: '/Pilot-tidsregistrering/medarbejder/'}).catch(function(e){console.log('SW fejl:',e);});
   });
 }
 </script>

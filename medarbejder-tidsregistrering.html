@@ -275,13 +275,43 @@ function importLicense(input){
 function doLogin(){
   var u=document.getElementById('loginUser').value.trim();
   var p=document.getElementById('loginPass').value;
+  if(!u||!p){showLoginError('Udfyld brugernavn og adgangskode.');return;}
+  // Tjek først lokalt (hurtigst)
   var users=getLocalUsers();
-  var user=null;
-  for(var i=0;i<users.length;i++){if(users[i].username===u&&users[i].password===p){user=users[i];break;}}
-  if(!user){
-    var el=document.getElementById('loginError');el.style.display='';el.textContent='Forkert brugernavn eller adgangskode.';return;
+  for(var i=0;i<users.length;i++){
+    if(users[i].username===u&&users[i].password===p){
+      startSession(users[i]);return;
+    }
   }
+  // Tjek Firebase hvis ikke fundet lokalt
+  document.getElementById('loginError').style.display='';
+  document.getElementById('loginError').textContent='Tjekker...';
+  db.collection('employees').doc(u).get().then(function(doc){
+    if(doc.exists){
+      var emp=doc.data();
+      if(emp.password===p){
+        // Gem lokalt til næste gang
+        var s=ls();if(!s.users)s.users=[];
+        s.users=s.users.filter(function(x){return x.username!==u;});
+        s.users.push({username:emp.username,password:emp.password,name:emp.name,role:emp.role||'',type:emp.type||'fuldtid',empNo:emp.empNo||''});
+        lss(s);
+        startSession(emp);
+      }else{
+        showLoginError('Forkert adgangskode.');
+      }
+    }else{
+      showLoginError('Brugernavn ikke fundet.');
+    }
+  }).catch(function(){showLoginError('Forkert brugernavn eller adgangskode.');});
+}
+
+function showLoginError(msg){
+  var el=document.getElementById('loginError');el.style.display='';el.textContent=msg;
+}
+
+function startSession(user){
   currentUser=user;
+  document.getElementById('loginError').style.display='none';
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('app').style.display='block';
   document.getElementById('topName').textContent=user.name;

@@ -309,6 +309,18 @@ function subscribeAll(){
     renderLiveDashboard();
   },function(err){console.error('checkin error',err);});
 
+  // Medarbejdere live fra Firebase
+  db.collection('employees').onSnapshot(function(snap){
+    var emps=[];
+    snap.forEach(function(d){emps.push(d.data());});
+    emps.sort(function(a,b){return(a.empNo||'').localeCompare(b.empNo||'');});
+    // Gem lokalt som cache
+    var s=gs();s.employees=emps;ss(s);
+    renderEmployees();
+    populateEmpSelectors();
+    renderLiveDashboard();
+  },function(err){console.error('employees error',err);});
+
   liveTimer=setInterval(updateElapsedCards,1000);
 }
 
@@ -618,20 +630,27 @@ function saveNewEmp(){
   var pass=document.getElementById('newPass').value;
   var type=document.getElementById('newType').value;
   if(!name||!user||!pass){showToast('⚠️ Udfyld navn, brugernavn og kode');return;}
-  var s=gs();if(!s.employees)s.employees=[];
-  for(var i=0;i<s.employees.length;i++){if(s.employees[i].username===user){showToast('⚠️ Brugernavn allerede i brug');return;}}
-  s.employees.push({empNo:empNo,username:user,name:name,type:type,role:type==='deltid'?'Deltid':'Fuldtid'});
+  var emps=getEmployees();
+  for(var i=0;i<emps.length;i++){if(emps[i].username===user){showToast('⚠️ Brugernavn allerede i brug');return;}}
+  var empData={empNo:empNo,username:user,name:name,type:type,role:type==='deltid'?'Deltid':'Fuldtid',password:pass};
+  // Gem i Firebase
+  db.collection('employees').doc(user).set(empData).then(function(){
+    showToast('✅ '+name+' oprettet!');
+  }).catch(function(e){showToast('⚠️ Fejl: '+e.message);});
+  // Gem også i employee localStorage så login virker
   var es=gse();if(!es.users)es.users=[];
+  es.users=es.users.filter(function(u){return u.username!==user;});
   es.users.push({username:user,password:pass,name:name,role:type==='deltid'?'Deltid':'Fuldtid',type:type,empNo:empNo});
-  sse(es);ss(s);
-  closeAddEmp();renderEmployees();populateEmpSelectors();showToast('✅ '+name+' oprettet!');
+  sse(es);
+  closeAddEmp();
   document.getElementById('newEmpNo').value='';
   document.getElementById('newName').value='';document.getElementById('newUser').value='';document.getElementById('newPass').value='';
 }
 function removeEmp(username){
   if(!confirm('Fjern medarbejder?'))return;
-  var s=gs();s.employees=(s.employees||[]).filter(function(e){return e.username!==username;});
-  ss(s);renderEmployees();showToast('🗑 Fjernet');
+  db.collection('employees').doc(username).delete().then(function(){
+    showToast('🗑 Fjernet');
+  }).catch(function(e){showToast('⚠️ Fejl: '+e.message);});
 }
 
 // ── Settings ──────────────────────────────────────────────

@@ -178,10 +178,11 @@ input[type=date],input[type=time]{color-scheme:dark}
       <div class="clock-time" id="liveClock">--:--:--</div>
       <div class="clock-date" id="liveDate"></div>
       <div id="statusBadge" class="status-badge status-out"><div class="dot dot-grey"></div><span>Ikke tjekket ind</span></div>
-      <div class="clock-btns">
+      <div class="clock-btns" id="clockBtns">
         <button id="btnIn" class="btn btn-green" onclick="checkIn()">✅ Tjek ind</button>
         <button id="btnOut" class="btn btn-disabled" onclick="checkOut()">🚪 Tjek ud</button>
       </div>
+      <button id="autoRegBtn" class="btn btn-primary" style="display:none;margin-top:10px" onclick="autoRegisterDay()">💾 Registrer dag</button>
       <div id="elapsedDiv" class="elapsed" style="display:none"></div>
     </div>
     <div class="card">
@@ -199,14 +200,17 @@ input[type=date],input[type=time]{color-scheme:dark}
     <div class="card">
       <div class="card-title">Manuel tidsregistrering</div>
       <div class="form-group"><label>Dato</label><input type="date" id="manDate"></div>
+      <div id="manTimeFields">
       <div class="row2" style="margin-top:10px">
         <div class="form-group"><label>Start</label><input type="time" id="manStart"></div>
         <div class="form-group"><label>Slut</label><input type="time" id="manEnd"></div>
       </div>
       <div class="form-group" style="margin-top:10px"><label>Pause (min)</label><input type="number" id="manBreak" placeholder="0" min="0" inputmode="numeric"></div>
+      </div>
+      <div id="manHoursHint" style="display:none;margin-top:10px;padding:10px 12px;background:#1a2640;border:1px solid #2a3c60;border-radius:10px;font-size:13px;color:#4f8ef7"></div>
       <div class="form-group" style="margin-top:10px">
         <label>Type</label>
-        <select id="manType">
+        <select id="manType" onchange="onManTypeChange()">
           <option value="normal">Normalt arbejde</option>
           <option value="feriefri">Feriefri</option>
           <option value="fravoer">Fravær</option>
@@ -527,20 +531,79 @@ function saveMissed(){
   saveEntry(entry);saveCheckInState({username:currentUser.username,checkedIn:false});
   setCheckInUI(false);document.getElementById('missedAlert').style.display='none';closeMissedModal();showToast('✅ Rettet!');
 }
+function getDayHours(dateStr){
+  // Fredag = 5, alle andre = 7.4
+  var d=new Date(dateStr||todayStr());
+  return d.getDay()===5 ? 7.0 : 7.4;
+}
 function setDayType(type,el){
-  selectedType=type;var btns=document.querySelectorAll('.daytype-btn');
-  for(var i=0;i<btns.length;i++)btns[i].classList.remove('selected');el.classList.add('selected');
+  selectedType=type;
+  var btns=document.querySelectorAll('.daytype-btn');
+  for(var i=0;i<btns.length;i++)btns[i].classList.remove('selected');
+  el.classList.add('selected');
+  // Vis/skjul knapper afhængigt af dagtype
+  var isWork=(type==='normal');
+  document.getElementById('clockBtns').style.display=isWork?'grid':'none';
+  document.getElementById('elapsedDiv').style.display='none';
+  var autoBtn=document.getElementById('autoRegBtn');
+  if(!isWork){
+    var typeLabels={ferie:'Ferie 🌴',feriefri:'Feriefri 📅',friuden:'Fri u. løn 🚫'};
+    var h=getDayHours();
+    autoBtn.style.display='flex';
+    autoBtn.textContent='💾 Registrer '+typeLabels[type]+' ('+h+' t)';
+  } else {
+    autoBtn.style.display='none';
+  }
+}
+function onManTypeChange(){
+  var type=document.getElementById('manType').value;
+  var isWork=(type==='normal'||type==='fravoer');
+  document.getElementById('manTimeFields').style.display=isWork?'':'none';
+  var hint=document.getElementById('manHoursHint');
+  if(!isWork){
+    var date=document.getElementById('manDate').value;
+    var h=getDayHours(date);
+    hint.style.display='';
+    hint.textContent='Registreres automatisk som '+h+' timer';
+  } else {
+    hint.style.display='none';
+  }
+}
+function autoRegisterDay(){
+  var hours=getDayHours();
+  var today=todayStr();
+  var existing=entriesCache.filter(function(e){return e.date===today&&e.type===selectedType;});
+  if(existing.length){showToast('⚠️ Du har allerede registreret '+selectedType+' i dag');return;}
+  var entry={
+    id:Date.now(),username:currentUser.username,name:currentUser.name,
+    date:today,start:'',end:'',hours:hours,
+    type:selectedType,method:'auto-day',note:'',approved:false
+  };
+  saveEntry(entry);
+  showToast('💾 '+hours+' timer gemt!');
+  var normalBtn=document.querySelector('.daytype-btn');
+  setDayType('normal',normalBtn);
 }
 function saveManual(){
-  var date=document.getElementById('manDate').value;var start=document.getElementById('manStart').value;
-  var end=document.getElementById('manEnd').value;var brk=parseInt(document.getElementById('manBreak').value)||0;
-  var type=document.getElementById('manType').value;var note=document.getElementById('manNote').value;
-  if(!date||!start||!end){showToast('⚠️ Udfyld dato, start og sluttid');return;}
-  var hours=Math.max(0,Math.round((timeToH(end)-timeToH(start)-brk/60)*100)/100);
+  var date=document.getElementById('manDate').value;
+  var type=document.getElementById('manType').value;
+  var note=document.getElementById('manNote').value;
+  var start=document.getElementById('manStart').value;
+  var end=document.getElementById('manEnd').value;
+  var brk=parseInt(document.getElementById('manBreak').value)||0;
+  if(!date){showToast('⚠️ Udfyld dato');return;}
+  var hours,isWork=(type==='normal'||type==='fravoer');
+  if(isWork){
+    if(!start||!end){showToast('⚠️ Udfyld start og sluttid');return;}
+    hours=Math.max(0,Math.round((timeToH(end)-timeToH(start)-brk/60)*100)/100);
+  } else {
+    hours=getDayHours(date);start='';end='';
+  }
   var entry={id:Date.now(),username:currentUser.username,name:currentUser.name,date:date,start:start,end:end,hours:hours,breakMin:brk,type:type,method:'manual',note:note,approved:false};
   saveEntry(entry);
   document.getElementById('manStart').value='';document.getElementById('manEnd').value='';
-  document.getElementById('manBreak').value='';document.getElementById('manNote').value='';showToast('💾 Gemt!');
+  document.getElementById('manBreak').value='';document.getElementById('manNote').value='';
+  showToast('💾 Gemt – '+hours+' timer!');
 }
 
 // ── Periods ───────────────────────────────────────────────

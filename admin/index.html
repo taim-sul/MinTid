@@ -472,7 +472,7 @@ function renderLiveDashboard(){
   var activeUsernames={};for(var i=0;i<emps.length;i++)activeUsernames[emps[i].username]=true;
   var checkedInCount=0,missedCount=0;
   var todayEntries=allEntries.filter(function(e){return e.date===today&&activeUsernames[e.username];});
-  var pendingTotal=allEntries.filter(function(e){return!e.approved&&activeUsernames[e.username];}).length;
+  var pendingTotal=allEntries.filter(function(e){return!e.approved&&!e.rejected&&activeUsernames[e.username];}).length;
   var todayH=todayEntries.filter(function(e){return e.type==='normal';}).reduce(function(s,e){return s+e.hours;},0);
   var cardsHtml='';
   for(var i=0;i<emps.length;i++){
@@ -574,8 +574,8 @@ function renderApprove(){
       html+='<tr><td>'+dl+'</td><td>'+(e.start||'–')+'</td><td>'+(e.end||'–')+'</td><td><strong>'+e.hours.toFixed(2)+'</strong></td><td><span class="tag '+cls+'">'+(typeLabel[e.type]||e.type)+'</span></td><td>'+stat+'</td><td><div style="display:flex;gap:4px">'+btns+'</div></td></tr>';
     }
     html+='</tbody></table></div>';
-    var pend=entries.filter(function(e){return!e.approved;});
-    if(pend.length)html+='<div style="margin-top:10px"><button class="btn btn-success" style="width:auto" onclick="approveAll(\''+emp.username+'\',\''+period+'\')">✅ Godkend alle ('+pend.length+')</button></div>';
+    var pend=entries.filter(function(e){return!e.approved&&!e.rejected;});
+    if(pend.length)html+='<div style="margin-top:10px"><button class="btn btn-success" style="width:auto" onclick="approveAll(\''+emp.username+'\',\''+period+'\')">✅ Godkend alle afventende ('+pend.length+')</button></div>';
     html+='</div>';
   }
   document.getElementById('approveList').innerHTML=html||'<div class="alert alert-info">Ingen registreringer i denne periode.</div>';
@@ -594,9 +594,9 @@ function deleteEntry(id){
 }
 function approveAll(username,period){
   var pd=periodDates(period);
-  var toApprove=allEntries.filter(function(e){var d=new Date(e.date);return e.username===username&&d>=pd.start&&d<=pd.end&&!e.approved;});
+  var toApprove=allEntries.filter(function(e){var d=new Date(e.date);return e.username===username&&d>=pd.start&&d<=pd.end&&!e.approved&&!e.rejected;});
   var batch=db.batch();
-  for(var i=0;i<toApprove.length;i++)batch.update(entriesCol().doc(String(toApprove[i].id)),{approved:true});
+  for(var i=0;i<toApprove.length;i++)batch.update(entriesCol().doc(String(toApprove[i].id)),{approved:true,rejected:false});
   batch.commit().then(function(){showToast('✅ Alle godkendt!');});
 }
 function openEdit(id){

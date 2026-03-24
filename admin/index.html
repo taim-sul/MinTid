@@ -245,7 +245,33 @@ tr:last-child td{border-bottom:none}
   </div>
 </div>
 
-<div id="editModal" class="modal-overlay" style="display:none">
+<div id="editEmpModal" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <h3>✏️ Rediger medarbejder</h3>
+    <div class="form-group"><label>Medarbejdernr.</label><input type="text" id="editEmpNo" inputmode="numeric"></div>
+    <div class="form-group" style="margin-top:10px"><label>Fulde navn</label><input type="text" id="editEmpName"></div>
+    <div class="form-group" style="margin-top:10px"><label>Ny adgangskode (lad stå tom for at beholde)</label><input type="password" id="editEmpPass" placeholder="Uændret"></div>
+    <div class="form-group" style="margin-top:10px"><label>Type</label>
+      <select id="editEmpType"><option value="deltid">Deltid</option><option value="fuldtid">Fuldtid</option></select>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-outline" onclick="closeEditEmp()">Annuller</button>
+      <button class="btn btn-primary" onclick="saveEditEmp()">Gem ændringer</button>
+    </div>
+  </div>
+</div>
+
+<div id="fixMissedModal" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <h3>🔧 Ret glemt udtjekning</h3>
+    <p style="color:#6b7280;font-size:14px;margin-bottom:14px">Angiv hvornår <strong id="fixMissedName"></strong> sluttede arbejde den <strong id="fixMissedDate"></strong>.</p>
+    <div class="form-group"><label>Sluttidspunkt</label><input type="time" id="fixMissedTime"></div>
+    <div class="modal-btns">
+      <button class="btn btn-outline" onclick="closeFixMissed()">Annuller</button>
+      <button class="btn btn-primary" onclick="saveFixMissed()">Gem</button>
+    </div>
+  </div>
+</div>
   <div class="modal">
     <h3>Ret registrering</h3>
     <div id="editContent"></div>
@@ -422,7 +448,13 @@ function renderLiveDashboard(){
     if(isIn&&!isMissed)checkedInCount++;if(isMissed)missedCount++;
     var cardClass='live-card'+(isIn&&!isMissed?' checkedin':isMissed?' missed':'');
     var statusHtml='';
-    if(isMissed){statusHtml='<div class="status-missed">⚠️ Glemt udtjekning</div>';}
+    if(isMissed){
+      var missedDate=new Date(cs.startTime);
+      var mo=['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'];
+      var missedLabel=missedDate.getDate()+'. '+mo[missedDate.getMonth()];
+      statusHtml='<div class="status-missed">⚠️ Glemt udtjekning '+missedLabel+'</div>'+
+        '<button class="btn btn-danger btn-sm" style="margin-top:6px;width:auto" onclick="adminFixMissed(\''+emp.username+'\','+cs.startTime+',\''+cs.date+'\',\''+(cs.dayType||'normal')+'\',\''+msToTime2(cs.startTime)+'\')">🔧 Ret udtjekning</button>';
+    }
     else if(isIn){
       var diff=now.getTime()-cs.startTime;
       var eh=Math.floor(diff/3600000),em=Math.floor((diff%3600000)/60000),es2=Math.floor((diff%60000)/1000);
@@ -713,8 +745,11 @@ function renderEmployees(){
   var html='<div class="table-wrap"><table><thead><tr><th>Nr.</th><th>Navn</th><th>Brugernavn</th><th>Type</th><th>Handling</th></tr></thead><tbody>'+
     emps.map(function(e){return'<tr><td><strong style="color:#2563eb">'+(e.empNo||'–')+'</strong></td><td><strong>'+e.name+'</strong></td><td style="font-size:12px;color:#6b7280">'+e.username+'</td>'+
       '<td><span class="tag tag-'+e.type+'">'+(e.type==='deltid'?'Deltid':'Fuldtid')+'</span></td>'+
-      '<td><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-success btn-sm" onclick="exportLicense(\''+e.username+'\')">📲 Login-fil</button>'+
-      '<button class="btn btn-danger btn-sm" onclick="removeEmp(\''+e.username+'\')">Fjern</button></div></td></tr>';}).join('')+
+      '<td><div style="display:flex;gap:6px;flex-wrap:wrap">'+
+        '<button class="btn btn-outline btn-sm" onclick="openEditEmp(\''+e.username+'\')">✏️ Rediger</button>'+
+        '<button class="btn btn-success btn-sm" onclick="exportLicense(\''+e.username+'\')">📲 Login-fil</button>'+
+        '<button class="btn btn-danger btn-sm" onclick="removeEmp(\''+e.username+'\')">Fjern</button>'+
+      '</div></td></tr>';}).join('')+
     '</tbody></table></div><div class="alert alert-info" style="margin-top:12px">💡 Send Login-fil til medarbejderen til brug ved første login.</div>';
   document.getElementById('empList').innerHTML=html;
 }
@@ -742,6 +777,70 @@ function saveNewEmp(){
   closeAddEmp();
   document.getElementById('newEmpNo').value='';document.getElementById('newName').value='';document.getElementById('newUser').value='';document.getElementById('newPass').value='';
 }
+// ── Edit Employee ─────────────────────────────────────────
+var editEmpTarget = null;
+function openEditEmp(username){
+  var emps=getEmployees();var emp=null;
+  for(var i=0;i<emps.length;i++){if(emps[i].username===username){emp=emps[i];break;}}
+  if(!emp)return;
+  editEmpTarget=username;
+  document.getElementById('editEmpNo').value=emp.empNo||'';
+  document.getElementById('editEmpName').value=emp.name||'';
+  document.getElementById('editEmpPass').value='';
+  document.getElementById('editEmpType').value=emp.type||'fuldtid';
+  document.getElementById('editEmpModal').style.display='flex';
+}
+function closeEditEmp(){document.getElementById('editEmpModal').style.display='none';editEmpTarget=null;}
+function saveEditEmp(){
+  if(!editEmpTarget)return;
+  var empNo=document.getElementById('editEmpNo').value.trim();
+  var name=document.getElementById('editEmpName').value.trim();
+  var pass=document.getElementById('editEmpPass').value;
+  var type=document.getElementById('editEmpType').value;
+  if(!name){showToast('⚠️ Navn må ikke være tomt');return;}
+  var updates={empNo:empNo,name:name,type:type,role:type==='deltid'?'Deltid':'Fuldtid'};
+  if(pass) updates.password=pass;
+  employeesCol().doc(editEmpTarget).update(updates).then(function(){
+    showToast('✅ Medarbejder opdateret');closeEditEmp();
+  }).catch(function(e){showToast('⚠️ Fejl: '+e.message);});
+}
+
+// ── Fix missed checkout (admin) ───────────────────────────
+var fixMissedData = null;
+function msToTime2(ms){var d=new Date(ms);return pad(d.getHours())+':'+pad(d.getMinutes());}
+function adminFixMissed(username, startTime, date, dayType, startStr){
+  var emps=getEmployees();var empName='';
+  for(var i=0;i<emps.length;i++){if(emps[i].username===username){empName=emps[i].name;break;}}
+  fixMissedData={username:username,startTime:startTime,date:date,dayType:dayType,startStr:startStr,name:empName};
+  var d=new Date(startTime);
+  var mo=['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'];
+  document.getElementById('fixMissedName').textContent=empName;
+  document.getElementById('fixMissedDate').textContent=d.getDate()+'. '+mo[d.getMonth()];
+  document.getElementById('fixMissedTime').value='';
+  document.getElementById('fixMissedModal').style.display='flex';
+}
+function closeFixMissed(){document.getElementById('fixMissedModal').style.display='none';fixMissedData=null;}
+function saveFixMissed(){
+  if(!fixMissedData)return;
+  var t=document.getElementById('fixMissedTime').value;
+  if(!t){showToast('⚠️ Angiv et sluttidspunkt');return;}
+  var endDate=new Date(fixMissedData.startTime);
+  var parts=t.split(':');endDate.setHours(parseInt(parts[0]),parseInt(parts[1]),0,0);
+  var hours=Math.max(0,Math.round(((endDate.getTime()-fixMissedData.startTime)/3600000)*100)/100);
+  var entry={
+    id:Date.now(),username:fixMissedData.username,name:fixMissedData.name,
+    date:fixMissedData.date,start:fixMissedData.startStr,end:t,hours:hours,
+    type:fixMissedData.dayType||'normal',method:'admin-fix',
+    note:'Rettet af admin: glemt udtjekning',approved:false
+  };
+  var batch=db.batch();
+  batch.set(entriesCol().doc(String(entry.id)),entry);
+  batch.set(checkinCol().doc(fixMissedData.username),{username:fixMissedData.username,checkedIn:false});
+  batch.commit().then(function(){
+    closeFixMissed();showToast('✅ Udtjekning rettet for '+fixMissedData.name);
+  }).catch(function(e){showToast('⚠️ Fejl: '+e.message);});
+}
+
 function removeEmp(username){
   if(!confirm('Fjern medarbejder?'))return;
   employeesCol().doc(username).delete().then(function(){showToast('🗑 Fjernet');}).catch(function(e){showToast('⚠️ Fejl');});

@@ -1,9 +1,9 @@
 {
-  "id": "pilot-admin",
+  "id": "MinTid-Arbejdsgiver",
   "name": "Pilot Admin",
-  "short_name": "Pilot Admin",
-  "start_url": "/Pilot-tidsregistrering/admin/",
-  "scope": "/Pilot-tidsregistrering/admin/",
+  "short_name": "MinTid-Arbejsgiver",
+  "start_url": "/MinTid/admin/",
+  "scope": "/MinTid/admin/",
   "display": "standalone",
   "background_color": "#1e3a8a",
   "theme_color": "#2563eb",

@@ -452,8 +452,18 @@ function renderLiveDashboard(){
       var missedDate=new Date(cs.startTime);
       var mo=['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'];
       var missedLabel=missedDate.getDate()+'. '+mo[missedDate.getMonth()];
+      var missedDateStr=missedDate.getFullYear()+'-'+pad(missedDate.getMonth()+1)+'-'+pad(missedDate.getDate());
+      var missedStartStr=pad(missedDate.getHours())+':'+pad(missedDate.getMinutes());
+      var missedType=cs.dayType||'normal';
       statusHtml='<div class="status-missed">⚠️ Glemt udtjekning '+missedLabel+'</div>'+
-        '<button class="btn btn-danger btn-sm" style="margin-top:6px;width:auto" onclick="adminFixMissed(\''+emp.username+'\','+cs.startTime+',\''+cs.date+'\',\''+(cs.dayType||'normal')+'\',\''+msToTime2(cs.startTime)+'\')">🔧 Ret udtjekning</button>';
+        '<button class="btn btn-danger btn-sm" style="margin-top:6px;width:auto" '+
+        'data-username="'+emp.username+'" '+
+        'data-starttime="'+cs.startTime+'" '+
+        'data-date="'+missedDateStr+'" '+
+        'data-type="'+missedType+'" '+
+        'data-start="'+missedStartStr+'" '+
+        'data-name="'+emp.name+'" '+
+        'onclick="adminFixMissedBtn(this)">🔧 Ret udtjekning</button>';
     }
     else if(isIn){
       var diff=now.getTime()-cs.startTime;
@@ -808,9 +818,16 @@ function saveEditEmp(){
 // ── Fix missed checkout (admin) ───────────────────────────
 var fixMissedData = null;
 function msToTime2(ms){var d=new Date(ms);return pad(d.getHours())+':'+pad(d.getMinutes());}
-function adminFixMissed(username, startTime, date, dayType, startStr){
-  var emps=getEmployees();var empName='';
-  for(var i=0;i<emps.length;i++){if(emps[i].username===username){empName=emps[i].name;break;}}
+function adminFixMissedBtn(btn){
+  var username=btn.getAttribute('data-username');
+  var startTime=parseInt(btn.getAttribute('data-starttime'));
+  var date=btn.getAttribute('data-date');
+  var dayType=btn.getAttribute('data-type');
+  var startStr=btn.getAttribute('data-start');
+  var name=btn.getAttribute('data-name');
+  adminFixMissed(username,startTime,date,dayType,startStr,name);
+}
+function adminFixMissed(username, startTime, date, dayType, startStr, empName){
   fixMissedData={username:username,startTime:startTime,date:date,dayType:dayType,startStr:startStr,name:empName};
   var d=new Date(startTime);
   var mo=['jan','feb','mar','apr','maj','jun','jul','aug','sep','okt','nov','dec'];

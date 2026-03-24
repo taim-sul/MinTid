@@ -1,7 +1,7 @@
 {
-  "id": "MinTid-medarbejder",
+  "id": "MinTid-Medarbejder",
   "name": "MinTid",
-  "short_name": "Tidsreg",
+  "short_name": "MinTid-Medarbejder",
   "start_url": "/MinTid/medarbejder/",
   "scope": "/MinTid/medarbejder/",
   "display": "standalone",

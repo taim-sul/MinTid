@@ -1,9 +1,9 @@
 {
-  "id": "pilot-medarbejder",
-  "name": "Pilot Tidsregistrering",
+  "id": "MinTid-medarbejder",
+  "name": "MinTid",
   "short_name": "Tidsreg",
-  "start_url": "/Pilot-tidsregistrering/medarbejder/",
-  "scope": "/Pilot-tidsregistrering/medarbejder/",
+  "start_url": "/MinTid/medarbejder/",
+  "scope": "/MinTid/medarbejder/",
   "display": "standalone",
   "background_color": "#0f1117",
   "theme_color": "#4f8ef7",

@@ -197,8 +197,28 @@ input[type=date],input[type=time]{color-scheme:dark}
   </div>
 
   <div id="tab-manual" class="tab-content">
+
     <div class="card">
-      <div class="card-title">Manuel tidsregistrering</div>
+      <div class="card-title">📅 Registrer ferieperiode</div>
+      <div class="alert alert-info" style="margin-bottom:12px">Vælg en periode — appen registrerer automatisk alle hverdage (mandag–fredag). Weekender springes over.</div>
+      <div class="form-group">
+        <label>Type</label>
+        <select id="periodType">
+          <option value="ferie">Ferie 🌴</option>
+          <option value="feriefri">Feriefri 📅</option>
+          <option value="friuden">Fri u. løn 🚫</option>
+        </select>
+      </div>
+      <div class="row2" style="margin-top:10px">
+        <div class="form-group"><label>Fra dato</label><input type="date" id="periodFrom" onchange="updatePeriodPreview()"></div>
+        <div class="form-group"><label>Til dato</label><input type="date" id="periodTo" onchange="updatePeriodPreview()"></div>
+      </div>
+      <div id="periodPreview" style="display:none;margin-top:10px;padding:10px 12px;background:#1a2640;border:1px solid #2a3c60;border-radius:10px;font-size:13px;color:#4f8ef7"></div>
+      <button class="btn btn-primary" style="margin-top:14px" onclick="savePeriod()">💾 Gem periode</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">✏️ Manuel enkelt registrering</div>
       <div class="form-group"><label>Dato</label><input type="date" id="manDate"></div>
       <div id="manTimeFields">
       <div class="row2" style="margin-top:10px">
@@ -221,6 +241,7 @@ input[type=date],input[type=time]{color-scheme:dark}
       <div class="form-group" style="margin-top:10px"><label>Note (valgfri)</label><input type="text" id="manNote" placeholder="Kommentar..."></div>
       <button class="btn btn-primary" style="margin-top:14px" onclick="saveManual()">💾 Gem registrering</button>
     </div>
+  </div>
   </div>
 
   <div id="tab-history" class="tab-content">
@@ -554,6 +575,51 @@ function setDayType(type,el){
   } else {
     autoBtn.style.display='none';
   }
+}
+function getWeekdays(from, to){
+  var days=[];var d=new Date(from);var end=new Date(to);
+  while(d<=end){
+    var day=d.getDay();
+    if(day!==0&&day!==6) days.push(d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()));
+    d.setDate(d.getDate()+1);
+  }
+  return days;
+}
+function updatePeriodPreview(){
+  var from=document.getElementById('periodFrom').value;
+  var to=document.getElementById('periodTo').value;
+  var preview=document.getElementById('periodPreview');
+  if(!from||!to||new Date(from)>new Date(to)){preview.style.display='none';return;}
+  var days=getWeekdays(from,to);
+  var totalH=days.reduce(function(s,d){return s+getDayHours(d);},0);
+  preview.style.display='';
+  preview.textContent=days.length+' hverdage · '+totalH.toFixed(1)+' timer i alt';
+}
+function savePeriod(){
+  var from=document.getElementById('periodFrom').value;
+  var to=document.getElementById('periodTo').value;
+  var type=document.getElementById('periodType').value;
+  if(!from||!to){showToast('⚠️ Vælg fra og til dato');return;}
+  if(new Date(from)>new Date(to)){showToast('⚠️ Fra-dato skal være før til-dato');return;}
+  var days=getWeekdays(from,to);
+  if(!days.length){showToast('⚠️ Ingen hverdage i perioden');return;}
+  // Tjek for dubletter
+  var existing=entriesCache.map(function(e){return e.date+'-'+e.type;});
+  var toSave=days.filter(function(d){return existing.indexOf(d+'-'+type)===-1;});
+  if(!toSave.length){showToast('⚠️ Alle dage er allerede registreret');return;}
+  var batch=db.batch();
+  for(var i=0;i<toSave.length;i++){
+    var d=toSave[i];
+    var entry={id:Date.now()+i,username:currentUser.username,name:currentUser.name,
+      date:d,start:'',end:'',hours:getDayHours(d),type:type,method:'period',note:'',approved:false};
+    batch.set(entriesCol().doc(String(entry.id)),entry);
+  }
+  batch.commit().then(function(){
+    showToast('✅ '+toSave.length+' dage registreret!');
+    document.getElementById('periodFrom').value='';
+    document.getElementById('periodTo').value='';
+    document.getElementById('periodPreview').style.display='none';
+  }).catch(function(){showToast('⚠️ Fejl ved gemning');});
 }
 function onManTypeChange(){
   var type=document.getElementById('manType').value;

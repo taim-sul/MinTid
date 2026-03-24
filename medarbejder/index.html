@@ -254,7 +254,8 @@ var db = firebase.firestore();
 // Virksomheder
 var COMPANIES = {
   'PP001': {name:'Pakkepiloten', code:'PP001'},
-  'SL001': {name:'Smart Line ApS', code:'SL001'}
+  'SL001': {name:'Smart Line ApS', code:'SL001'},
+  'TML001': {name:'TML A/S', code:'TML001'}
 };
 
 // State
@@ -587,7 +588,7 @@ function pad(n){return n<10?'0'+n:''+n;}
 function msToTime(ms){var d=new Date(ms);return pad(d.getHours())+':'+pad(d.getMinutes());}
 function timeToH(t){var p=t.split(':');return parseInt(p[0])+parseInt(p[1])/60;}
 function showToast(msg){var t=document.getElementById('toast');t.textContent=msg;t.style.opacity='1';setTimeout(function(){t.style.opacity='0';},2500);}
-if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js',{scope:'./'}).catch(function(e){console.log('SW:',e);});});}
+if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js', {scope: '/Pilot-tidsregistrering/medarbejder/'}).catch(function(e){console.log('SW:',e);});});}
 </script>
 </body>
 </html>

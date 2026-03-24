@@ -1,4 +1,4 @@
-var CACHE = 'medarbejder-v5';
+var CACHE = 'medarbejder-v7';
 self.addEventListener('install', function(e){self.skipWaiting();});
 self.addEventListener('activate', function(e){
   e.waitUntil(caches.keys().then(function(keys){

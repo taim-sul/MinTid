@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Pilot Admin">
 <meta name="theme-color" content="#2563eb">
-<link rel="manifest" href="manifest-arbejdsgiver.json">
+<link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-admin-192.png">
 <title>Tidsregistrering – Arbejdsgiver</title>
 <script src="https://cdn.jsdelivr.net/npm/firebase@10.12.0/firebase-app-compat.min.js"></script>
@@ -928,7 +928,7 @@ function showTab(id,el){
 function pad(n){return n<10?'0'+n:''+n;}
 function timeToH(t){var p=t.split(':');return parseInt(p[0])+parseInt(p[1])/60;}
 function showToast(msg){var t=document.getElementById('toast');t.textContent=msg;t.style.opacity='1';setTimeout(function(){t.style.opacity='0';},2500);}
-if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw-arbejdsgiver.js',{scope:'./'}).catch(function(e){console.log('SW:',e);});});}
+if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js', {scope: '/Pilot-tidsregistrering/admin/'}).catch(function(e){console.log('SW:',e);});});}
 </script>
 </body>
 </html>

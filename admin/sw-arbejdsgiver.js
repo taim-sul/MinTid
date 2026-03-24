@@ -1,4 +1,4 @@
-var CACHE = 'pilot-admin-v4';
+var CACHE = 'MinTid-Arbejdsgiver-v4';
 
 self.addEventListener('install', function(e) {
   self.skipWaiting();

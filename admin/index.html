@@ -193,18 +193,15 @@ tr:last-child td{border-bottom:none}
     <div class="card">
       <div class="card-title">⏱ Arbejdstidsregler</div>
       <div class="form-group"><label>Normal daglig arbejdstid (timer)</label><input type="number" id="setNorm" value="7.4" step="0.1" inputmode="decimal"></div>
-      <div class="form-group" style="margin-top:10px"><label>OT Kat. 1 grænse (timer over normal)</label><input type="number" id="setOT1" value="2" step="0.5" inputmode="decimal"></div>
-      <div class="form-group" style="margin-top:10px"><label>OT Kat. 2 grænse (timer over kat. 1)</label><input type="number" id="setOT2" value="3" step="0.5" inputmode="decimal"></div>
       <button class="btn btn-primary" style="margin-top:14px" onclick="saveSettings()">Gem</button>
     </div>
     <div class="card">
       <div class="card-title">🕐 KA Transport – Tillægsregler</div>
-      <div class="alert-info" style="background:#eff4ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 12px;font-size:12px;color:#2563eb;margin-bottom:14px">
+      <div style="background:#eff4ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 12px;font-size:12px;color:#2563eb;margin-bottom:14px">
         Indstil tillæg i henhold til KA Transport overenskomsten og jeres lokalaftale.
       </div>
       <div class="form-group"><label>Normal arbejdstid start (lokalaftale)</label><input type="time" id="setDayStart" value="05:00"></div>
       <div class="form-group" style="margin-top:10px"><label>Normal arbejdstid slut (hverdag)</label><input type="time" id="setDayEnd" value="18:00"></div>
-      <div class="form-group" style="margin-top:10px"><label>Aftentillæg start (hverdag)</label><input type="time" id="setEveStart" value="18:00"></div>
       <div class="form-group" style="margin-top:10px"><label>Nattillæg start (hverdag)</label><input type="time" id="setNightStart" value="22:00"></div>
       <div style="height:1px;background:#e2e4ef;margin:14px 0"></div>
       <div style="font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Tillægssatser (% af mindsteløn)</div>
@@ -216,6 +213,7 @@ tr:last-child td{border-bottom:none}
         <div class="form-group"><label>Lørdagstillæg %</label><input type="number" id="setSatPct" value="50" step="5" inputmode="numeric"></div>
         <div class="form-group"><label>Søn/helligdag %</label><input type="number" id="setSunPct" value="100" step="5" inputmode="numeric"></div>
       </div>
+      <div class="form-group" style="margin-top:10px"><label>Over 10 timer/dag tillæg %</label><input type="number" id="setOver10Pct" value="100" step="5" inputmode="numeric"></div>
       <div class="form-group" style="margin-top:10px"><label>Mindsteløn pr. time (kr.)</label><input type="number" id="setMinWage" value="145" step="0.5" inputmode="decimal"></div>
       <button class="btn btn-primary" style="margin-top:14px" onclick="saveSettings()">Gem tillægsregler</button>
     </div>
@@ -320,7 +318,7 @@ function ss(d){try{localStorage.setItem('tidsreg_employer',JSON.stringify(d));}c
 
 function getSettings(){
   var s=gs();var key='settings_'+(currentCompany?currentCompany.code:'');
-  if(!s[key])s[key]={normalHours:7.4,ot1:2,ot2:3,dayStart:'05:00',dayEnd:'18:00',eveStart:'18:00',nightStart:'22:00',eveningPct:25,nightPct:50,satPct:50,sunPct:100,minWage:145};
+  if(!s[key])s[key]={normalHours:7.4,dayStart:'05:00',dayEnd:'18:00',nightStart:'22:00',eveningPct:25,nightPct:50,satPct:50,sunPct:100,over10Pct:100,minWage:145};
   return s[key];
 }
 
@@ -590,7 +588,7 @@ function renderPeriod(){
 
     // OT beregning
     var bd=calcBreakdown(emp,entries,settings);
-    var totalOT=bd.ot1+bd.ot2+bd.ot3;
+    var totalOT=bd.over10||0;
 
     for(var j=0;j<entries.length;j++){
       var t=calcTillaeg(entries[j],settings);
@@ -613,7 +611,7 @@ function renderPeriod(){
     if(totalNight>0) html+='<div class="sum-row"><span>Nattimer ('+settings.nightStart+'–'+settings.dayStart+')</span><span style="font-weight:600">'+totalNight.toFixed(2)+' t</span></div>';
     if(totalSat>0) html+='<div class="sum-row"><span>Lørdagstimer</span><span style="font-weight:600">'+totalSat.toFixed(2)+' t</span></div>';
     if(totalSun>0) html+='<div class="sum-row"><span>Søn/helligdagstimer</span><span style="font-weight:600">'+totalSun.toFixed(2)+' t</span></div>';
-    if(totalOT>0) html+='<div class="sum-row"><span>Overarbejde</span><span style="font-weight:600">'+totalOT.toFixed(2)+' t</span></div>';
+    if(totalOT>0) html+='<div class="sum-row"><span>Over 10 timer/dag</span><span style="font-weight:600">'+totalOT.toFixed(2)+' t</span></div>';
     html+='<div class="sum-row"><span><strong>Total timer</strong></span><span style="font-weight:700">'+totalHours.toFixed(2)+' t</span></div>';
     html+='</div>';
 
@@ -697,11 +695,18 @@ function getEaster(y){var a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e
 function addDays(d,n){var r=new Date(d);r.setDate(r.getDate()+n);return r;}
 function isHoliday(ds){var d=new Date(ds);var m=d.getMonth()+1,day=d.getDate(),y=d.getFullYear();if((m===1&&day===1)||(m===12&&[24,25,26,31].indexOf(day)>=0))return true;var easter=getEaster(y);var dates=[easter,addDays(easter,1),addDays(easter,-3),addDays(easter,-2),addDays(easter,39),addDays(easter,49),addDays(easter,50)];for(var i=0;i<dates.length;i++){if(dates[i].toISOString().split('T')[0]===ds)return true;}return false;}
 function calcBreakdown(emp,entries,settings){
-  var bd={normal:0,ot1:0,ot2:0,ot3:0,saturday:0,ferie:0,feriefri:0,fravoer:0,friuden:0,sh:0};
-  for(var i=0;i<entries.length;i++){var e=entries[i];var d=new Date(e.date);var isSat=d.getDay()===6;var isHol=isHoliday(e.date);
+  var bd={normal:0,over10:0,saturday:0,ferie:0,feriefri:0,fravoer:0,friuden:0,sh:0};
+  for(var i=0;i<entries.length;i++){
+    var e=entries[i];var d=new Date(e.date);var isSat=d.getDay()===6;var isHol=isHoliday(e.date);
     if(e.type!=='normal'){bd[e.type]=(bd[e.type]||0)+e.hours;if(isHol&&emp.type==='deltid')bd.sh+=e.hours;continue;}
-    if(isSat){bd.saturday+=e.hours;}else{var norm=settings.normalHours;if(e.hours<=norm){bd.normal+=e.hours;}else{bd.normal+=norm;var over=e.hours-norm;if(over<=settings.ot1){bd.ot1+=over;}else if(over<=settings.ot1+settings.ot2){bd.ot1+=settings.ot1;bd.ot2+=over-settings.ot1;}else{bd.ot1+=settings.ot1;bd.ot2+=settings.ot2;bd.ot3+=over-settings.ot1-settings.ot2;}}}
-    if(isHol&&emp.type==='deltid')bd.sh+=e.hours;}
+    if(isSat){bd.saturday+=e.hours;}
+    else{
+      var norm=settings.normalHours||7.4;
+      if(e.hours<=norm){bd.normal+=e.hours;}
+      else{bd.normal+=norm;bd.over10+=e.hours-norm;}
+    }
+    if(isHol&&emp.type==='deltid')bd.sh+=e.hours;
+  }
   return bd;
 }
 
@@ -711,11 +716,11 @@ function exportExcel(){
   var period=document.getElementById('expPeriod').value;var empFilter=document.getElementById('expEmp').value;
   var pd=periodDates(period);var emps=empFilter?getEmployees().filter(function(e){return e.username===empFilter;}):getEmployees();
   var settings=getSettings();var wb=XLSX.utils.book_new();
-  var summaryData=[['TIDSREGISTRERING – '+currentCompany.name],['Periode: '+periodLabel(period)],['Eksporteret: '+new Date().toLocaleString('da-DK')],[],['Medarbejder','Type','Normale t','OT1','OT2','OT3','Lørdag','Ferie','Feriefri','Fravær','Fri u.løn','S/H','Total']];
+  var summaryData=[['TIDSREGISTRERING – '+currentCompany.name],['Periode: '+periodLabel(period)],['Eksporteret: '+new Date().toLocaleString('da-DK')],[],['Medarbejder','Type','Normale t','Over 10t/dag','Lørdag','Ferie','Feriefri','Fravær','Fri u.løn','S/H','Total']];
   for(var i=0;i<emps.length;i++){
     var emp=emps[i];var entries=allEntries.filter(function(e){var d=new Date(e.date);return e.username===emp.username&&d>=pd.start&&d<=pd.end&&e.approved;});
     var bd=calcBreakdown(emp,entries,settings);var total=0;for(var k in bd)total+=bd[k];
-    summaryData.push([emp.name,emp.type==='deltid'?'Deltid':'Fuldtid',bd.normal.toFixed(2),bd.ot1.toFixed(2),bd.ot2.toFixed(2),bd.ot3.toFixed(2),bd.saturday.toFixed(2),bd.ferie.toFixed(2),bd.feriefri.toFixed(2),bd.fravoer.toFixed(2),bd.friuden.toFixed(2),bd.sh.toFixed(2),total.toFixed(2)]);
+    summaryData.push([emp.name,emp.type==='deltid'?'Deltid':'Fuldtid',bd.normal.toFixed(2),(bd.over10||0).toFixed(2),bd.saturday.toFixed(2),bd.ferie.toFixed(2),bd.feriefri.toFixed(2),bd.fravoer.toFixed(2),bd.friuden.toFixed(2),bd.sh.toFixed(2),total.toFixed(2)]);
     var days=['Søn','Man','Tir','Ons','Tor','Fre','Lør'];var typeL={normal:'Arbejde',ferie:'Ferie',feriefri:'Feriefri',friuden:'Fri u. løn',fravoer:'Fravær'};
     var sheetData=[[emp.name],['Periode: '+periodLabel(period)],[],['Dato','Dag','Start','Slut','Timer','Pause','Type','Normal t','Aften t','Nat t','Lørdag t','Søn t','Aftentillæg kr','Nattillæg kr','Lørdagstillæg kr','Søn tillæg kr','Note']];
     var sorted=entries.sort(function(a,b){return new Date(a.date)-new Date(b.date);});
@@ -869,32 +874,28 @@ function removeEmp(username){
 function loadSettings(){
   var s=getSettings();
   document.getElementById('setNorm').value=s.normalHours;
-  document.getElementById('setOT1').value=s.ot1;
-  document.getElementById('setOT2').value=s.ot2;
   document.getElementById('setDayStart').value=s.dayStart||'05:00';
   document.getElementById('setDayEnd').value=s.dayEnd||'18:00';
-  document.getElementById('setEveStart').value=s.eveStart||'18:00';
   document.getElementById('setNightStart').value=s.nightStart||'22:00';
   document.getElementById('setEveningPct').value=s.eveningPct||25;
   document.getElementById('setNightPct').value=s.nightPct||50;
   document.getElementById('setSatPct').value=s.satPct||50;
   document.getElementById('setSunPct').value=s.sunPct||100;
+  document.getElementById('setOver10Pct').value=s.over10Pct||100;
   document.getElementById('setMinWage').value=s.minWage||145;
 }
 function saveSettings(){
   var s=gs();
   s['settings_'+currentCompany.code]={
     normalHours:parseFloat(document.getElementById('setNorm').value)||7.4,
-    ot1:parseFloat(document.getElementById('setOT1').value)||2,
-    ot2:parseFloat(document.getElementById('setOT2').value)||3,
     dayStart:document.getElementById('setDayStart').value||'05:00',
     dayEnd:document.getElementById('setDayEnd').value||'18:00',
-    eveStart:document.getElementById('setEveStart').value||'18:00',
     nightStart:document.getElementById('setNightStart').value||'22:00',
     eveningPct:parseFloat(document.getElementById('setEveningPct').value)||25,
     nightPct:parseFloat(document.getElementById('setNightPct').value)||50,
     satPct:parseFloat(document.getElementById('setSatPct').value)||50,
     sunPct:parseFloat(document.getElementById('setSunPct').value)||100,
+    over10Pct:parseFloat(document.getElementById('setOver10Pct').value)||100,
     minWage:parseFloat(document.getElementById('setMinWage').value)||145
   };
   ss(s);showToast('⚙️ Indstillinger gemt');

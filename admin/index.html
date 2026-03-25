@@ -810,8 +810,15 @@ function exportPDF(){
     for(var k in bd){if(bd[k]>0)html+='<tr><td>'+(labels[k]||k)+'</td><td><b>'+bd[k].toFixed(2)+' t</b></td></tr>';}
     html+='<tr class="total-row"><td>TOTAL</td><td><b>'+total.toFixed(2)+' t</b></td></tr></tbody></table>';
   }
-  html+='<script>window.print();<\/script></body></html>';
-  var win=window.open('','_blank');if(win){win.document.write(html);win.document.close();}else{showToast('⚠️ Tillad popups');}
+  html+='</body></html>';
+  var blob=new Blob([html],{type:'text/html;charset=utf-8'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;
+  a.download='tidsreg_'+currentCompany.code+'_'+period+'.html';
+  document.body.appendChild(a);a.click();
+  document.body.removeChild(a);URL.revokeObjectURL(url);
+  showToast('📄 PDF klar til print!');
 }
 
 // ── Employees ─────────────────────────────────────────────

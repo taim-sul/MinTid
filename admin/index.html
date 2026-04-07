@@ -177,6 +177,19 @@ tr:last-child td{border-bottom:none}
 
   <div id="t-export" class="tab-content">
     <div class="card">
+      <div class="card-title">📥 Importer timeseddel fra Excel</div>
+      <div class="alert alert-info" style="margin-bottom:12px">Importér en Excel-fil med timesedler (ét ark per medarbejder). Rækkerne matches automatisk til eksisterende medarbejdere via navn.</div>
+      <div class="form-group">
+        <label>Vælg Excel-fil (.xlsx)</label>
+        <input type="file" id="importFile" accept=".xlsx" style="width:100%;padding:10px 0;font-size:14px;color:#1e2235">
+      </div>
+      <div id="importPreview" style="display:none;margin-top:12px"></div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn btn-primary" style="flex:1;width:auto" onclick="parseImportFile()">🔍 Analysér fil</button>
+        <button class="btn btn-success" style="flex:1;width:auto;display:none" id="doImportBtn" onclick="doImport()">✅ Importer registreringer</button>
+      </div>
+    </div>
+    <div class="card">
       <div class="card-title">📊 Eksport til revisor</div>
       <div class="form-group"><label>Lønperiode</label><select id="expPeriod"></select></div>
       <div class="form-group" style="margin-top:10px"><label>Medarbejder</label><select id="expEmp"><option value="">Alle</option></select></div>
@@ -986,7 +999,242 @@ function showTab(id,el){
 function pad(n){return n<10?'0'+n:''+n;}
 function timeToH(t){var p=t.split(':');return parseInt(p[0])+parseInt(p[1])/60;}
 function showToast(msg){var t=document.getElementById('toast');t.textContent=msg;t.style.opacity='1';setTimeout(function(){t.style.opacity='0';},2500);}
+
+// ── Excel Import ──────────────────────────────────────────
+var importParsedData = null;
+
+function parseDanskDato(s) {
+  // "20.02.2026" → "2026-02-20"
+  if (!s || typeof s !== 'string') return null;
+  var parts = s.trim().split('.');
+  if (parts.length === 3) return parts[2] + '-' + parts[1] + '-' + parts[0];
+  return null;
+}
+
+function parseExcelTime(val) {
+  // Excel time serial or string "09:50"
+  if (typeof val === 'number') {
+    var totalMin = Math.round(val * 24 * 60);
+    return pad(Math.floor(totalMin / 60)) + ':' + pad(totalMin % 60);
+  }
+  if (typeof val === 'string' && val.indexOf(':') > -1) return val.trim();
+  return null;
+}
+
+function normalizeName(n) {
+  return (n || '').toString().toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
+function findEmployee(sheetName, employees) {
+  var sn = normalizeName(sheetName);
+  // Exact match first
+  for (var i = 0; i < employees.length; i++) {
+    if (normalizeName(employees[i].name) === sn) return employees[i];
+  }
+  // Partial match
+  for (var i = 0; i < employees.length; i++) {
+    var en = normalizeName(employees[i].name);
+    if (en.indexOf(sn) >= 0 || sn.indexOf(en) >= 0) return employees[i];
+  }
+  // Word-level match (first or last name)
+  var snWords = sn.split(' ');
+  for (var i = 0; i < employees.length; i++) {
+    var enWords = normalizeName(employees[i].name).split(' ');
+    for (var j = 0; j < snWords.length; j++) {
+      for (var k = 0; k < enWords.length; k++) {
+        if (snWords[j].length >= 3 && snWords[j] === enWords[k]) return employees[i];
+      }
+    }
+  }
+  return null;
+}
+
+function detectEmployeeType(typeCell) {
+  if (!typeCell) return null;
+  var t = typeCell.toString().toLowerCase();
+  if (t.indexOf('chauf') >= 0) return 'chauffør';
+  if (t.indexOf('medh') >= 0) return 'medhælper';
+  return t;
+}
+
+function parseImportFile() {
+  if (typeof XLSX === 'undefined') { showToast('⚠️ XLSX bibliotek ikke indlæst'); return; }
+  var file = document.getElementById('importFile').files[0];
+  if (!file) { showToast('⚠️ Vælg en Excel-fil først'); return; }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var wb = XLSX.read(e.target.result, { type: 'array', cellDates: false });
+      var employees = getEmployees();
+      importParsedData = [];
+      var previewHtml = '';
+      var totalRows = 0, totalMatched = 0, totalUnmatched = 0;
+
+      for (var si = 0; si < wb.SheetNames.length; si++) {
+        var sheetName = wb.SheetNames[si];
+        var ws = wb.Sheets[sheetName];
+        var rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        if (!rows || rows.length < 5) continue;
+
+        // Detect if this is a "Periodeopsummering" summary sheet - skip those
+        var firstCell = (rows[0][0] || '').toString();
+        if (firstCell.indexOf('Periodeopsummering') >= 0) continue;
+
+        // Try to extract period and employee type from header rows
+        var empTypeLine = '';
+        var periodLine = '';
+        for (var r = 0; r < Math.min(6, rows.length); r++) {
+          var c0 = (rows[r][0] || '').toString();
+          if (c0.indexOf('Type:') >= 0) empTypeLine = c0;
+          if (c0.indexOf('Periode:') >= 0) periodLine = c0;
+        }
+
+        // Find the header row (Dag, Dato, Mødt, Gået, ...)
+        var headerRow = -1;
+        for (var r = 0; r < Math.min(10, rows.length); r++) {
+          if ((rows[r][0] || '').toString().indexOf('Dag') >= 0 && (rows[r][1] || '').toString().indexOf('Dato') >= 0) {
+            headerRow = r;
+            break;
+          }
+        }
+        if (headerRow < 0) continue;
+
+        var emp = findEmployee(sheetName, employees);
+        var empStatus = emp ? '✅ Matchet: <strong>' + emp.name + '</strong> (' + emp.username + ')' : '⚠️ Ikke matchet';
+        var empClass = emp ? '' : 'background:#fffbeb;border:1px solid #fcd34d;';
+        var entries = [];
+
+        for (var r = headerRow + 1; r < rows.length; r++) {
+          var row = rows[r];
+          var dag = (row[0] || '').toString().trim();
+          var dato = (row[1] || '').toString().trim();
+          var modt = row[2];
+          var gaet = row[3];
+          var pause = row[4];
+          var nettoH = row[5];
+
+          // Skip week headers, TOTAL, blank, Fri
+          if (!dato || dato === '' || dag.indexOf('──') >= 0 || dag === 'Dag' || dag === 'TOTAL') continue;
+          if ((nettoH || '').toString().indexOf('Fri') >= 0 || nettoH === '' || nettoH === null) continue;
+
+          var dateStr = parseDanskDato(dato);
+          if (!dateStr) continue;
+
+          var startStr = parseExcelTime(modt);
+          var endStr = parseExcelTime(gaet);
+          var breakMin = parseInt(pause) || 0;
+          var hours = typeof nettoH === 'number' ? Math.round(nettoH * 100) / 100 : parseFloat(nettoH) || 0;
+          if (hours <= 0) continue;
+
+          // Determine day type - Saturday gets type 'normal' (overtime handled by calcTillaeg)
+          var entryType = 'normal';
+
+          entries.push({ date: dateStr, start: startStr, end: endStr, hours: hours, breakMin: breakMin, type: entryType });
+          totalRows++;
+          if (emp) totalMatched++;
+          else totalUnmatched++;
+        }
+
+        if (entries.length === 0) continue;
+
+        importParsedData.push({ sheetName: sheetName, emp: emp, empTypeLine: empTypeLine, periodLine: periodLine, entries: entries });
+
+        // Build preview table
+        previewHtml += '<div style="margin-bottom:14px;padding:12px;border-radius:10px;border:1px solid #e2e4ef;' + empClass + '">';
+        previewHtml += '<div style="font-weight:700;font-size:13px;margin-bottom:6px">📋 ' + sheetName + ' — ' + empStatus + '</div>';
+        if (empTypeLine) previewHtml += '<div style="font-size:11px;color:#6b7280;margin-bottom:4px">' + empTypeLine + (periodLine ? ' · ' + periodLine : '') + '</div>';
+        previewHtml += '<div style="font-size:12px;color:#6b7280;margin-bottom:8px">' + entries.length + ' arbejdsdage fundet</div>';
+        previewHtml += '<div class="table-wrap"><table><thead><tr><th>Dato</th><th>Start</th><th>Slut</th><th>Timer</th><th>Pause</th></tr></thead><tbody>';
+        for (var ei = 0; ei < Math.min(entries.length, 5); ei++) {
+          var en = entries[ei];
+          previewHtml += '<tr><td>' + en.date + '</td><td>' + (en.start || '–') + '</td><td>' + (en.end || '–') + '</td><td><strong>' + en.hours.toFixed(2) + '</strong></td><td>' + en.breakMin + ' min</td></tr>';
+        }
+        if (entries.length > 5) previewHtml += '<tr><td colspan="5" style="text-align:center;color:#9ca3af;font-size:11px">... og ' + (entries.length - 5) + ' flere rækker</td></tr>';
+        previewHtml += '</tbody></table></div></div>';
+      }
+
+      var summaryColor = totalUnmatched > 0 ? '#fffbeb' : '#f0fdf4';
+      var summaryBorder = totalUnmatched > 0 ? '#fcd34d' : '#6ee7b7';
+      var preview = document.getElementById('importPreview');
+      preview.style.display = 'block';
+      preview.innerHTML =
+        '<div style="background:' + summaryColor + ';border:1px solid ' + summaryBorder + ';border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px">' +
+        '<strong>Analyse komplet:</strong> ' + totalRows + ' rækker fundet · ' + totalMatched + ' rækker matchet · ' +
+        (totalUnmatched > 0 ? '<span style="color:#d97706">' + totalUnmatched + ' rækker uden medarbejder-match</span>' : '0 umatched') +
+        '</div>' + previewHtml;
+
+      var doBtn = document.getElementById('doImportBtn');
+      doBtn.style.display = totalMatched > 0 ? '' : 'none';
+    } catch(err) {
+      showToast('⚠️ Fejl ved læsning: ' + err.message);
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function doImport() {
+  if (!importParsedData || !importParsedData.length) { showToast('⚠️ Ingen data at importere'); return; }
+  if (!confirm('Importér registreringer til Firestore? Eksisterende registreringer for de samme datoer overskrives IKKE (dubletter undgås automatisk).')) return;
+
+  var batch = db.batch();
+  var count = 0;
+  var skipped = 0;
+  var now = Date.now();
+
+  // Build a set of existing entry keys to avoid duplicates: "username_date"
+  var existingKeys = {};
+  for (var i = 0; i < allEntries.length; i++) {
+    existingKeys[allEntries[i].username + '_' + allEntries[i].date] = true;
+  }
+
+  for (var si = 0; si < importParsedData.length; si++) {
+    var sheet = importParsedData[si];
+    if (!sheet.emp) continue;
+
+    for (var ei = 0; ei < sheet.entries.length; ei++) {
+      var en = sheet.entries[ei];
+      var key = sheet.emp.username + '_' + en.date;
+      if (existingKeys[key]) { skipped++; continue; }
+
+      var entryId = now + si * 10000 + ei;
+      var entry = {
+        id: entryId,
+        username: sheet.emp.username,
+        name: sheet.emp.name,
+        date: en.date,
+        start: en.start || '',
+        end: en.end || '',
+        hours: en.hours,
+        breakMin: en.breakMin || 0,
+        type: en.type || 'normal',
+        method: 'excel-import',
+        approved: false,
+        rejected: false,
+        note: 'Importeret fra Excel'
+      };
+      batch.set(entriesCol().doc(String(entryId)), entry);
+      existingKeys[key] = true;
+      count++;
+    }
+  }
+
+  if (count === 0) { showToast('ℹ️ Ingen nye registreringer at tilføje (alle allerede importeret)'); return; }
+
+  batch.commit().then(function() {
+    showToast('✅ ' + count + ' registreringer importeret!' + (skipped > 0 ? ' (' + skipped + ' sprunget over – eksisterer allerede)' : ''));
+    document.getElementById('doImportBtn').style.display = 'none';
+    document.getElementById('importPreview').style.display = 'none';
+    document.getElementById('importFile').value = '';
+    importParsedData = null;
+  }).catch(function(err) {
+    showToast('⚠️ Fejl ved import: ' + err.message);
+    console.error(err);
+  });
+}
+
 if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw-arbejdsgiver.js',{scope:'./'}).catch(function(e){console.log('SW:',e);});});}
 </script>
 </body>
 </html>
+

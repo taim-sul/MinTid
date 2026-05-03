@@ -503,18 +503,57 @@ function updateClock(){
 }
 
 // ── Check In/Out ──────────────────────────────────────────
+var _actionLock = false;
+function _withLock(fn) {
+  if (_actionLock) return;
+  _actionLock = true;
+  fn();
+  setTimeout(function(){ _actionLock = false; }, 2000);
+}
+function _setBtnLoading(id, loading, label) {
+  var btn = document.getElementById(id);
+  if (!btn) return;
+  btn.disabled = loading;
+  if (loading) { btn.dataset.orig = btn.textContent; btn.textContent = '⏳'; }
+  else btn.textContent = label || btn.dataset.orig || btn.textContent;
+}
+
 function checkIn(){
-  var state={username:currentUser.username,name:currentUser.name,checkedIn:true,startTime:Date.now(),start:pad(new Date().getHours())+':'+pad(new Date().getMinutes()),date:todayStr(),dayType:selectedType};
-  saveCheckInState(state);setCheckInUI(true);showToast('✅ Tjekket ind!');
+  _withLock(function(){
+    _setBtnLoading('btnIn', true);
+    var now = new Date();
+    var state={username:currentUser.username,name:currentUser.name,checkedIn:true,startTime:Date.now(),start:pad(now.getHours())+':'+pad(now.getMinutes()),date:todayStr(),dayType:selectedType};
+    checkinCol().doc(currentUser.username).set(state).then(function(){
+      var s=ls();s.checkInState=state;lss(s);
+      setCheckInUI(true);showToast('✅ Tjekket ind!');
+    }).catch(function(err){
+      showToast('⚠️ Kunne ikke tjekke ind – prøv igen');
+    }).finally(function(){
+      _setBtnLoading('btnIn', false);
+      _actionLock = false;
+    });
+  });
 }
 function checkOut(){
-  var cs=loadCheckInState();if(!cs||!cs.checkedIn)return;
-  var endTime=Date.now();
-  var hours=Math.round(((endTime-cs.startTime)/3600000)*100)/100;
-  var entry={id:endTime,username:currentUser.username,name:currentUser.name,date:cs.date,start:msToTime(cs.startTime),end:msToTime(endTime),hours:hours,type:cs.dayType||selectedType||'normal',method:'auto',note:'',approved:false};
-  saveEntry(entry);
-  saveCheckInState({username:currentUser.username,checkedIn:false});
-  setCheckInUI(false);showToast('🚪 Udtjekket – '+hours.toFixed(2)+' timer gemt');
+  _withLock(function(){
+    var cs=loadCheckInState();if(!cs||!cs.checkedIn){_actionLock=false;return;}
+    _setBtnLoading('btnOut', true);
+    var endTime=Date.now();
+    var hours=Math.round(((endTime-cs.startTime)/3600000)*100)/100;
+    var entry={id:endTime,username:currentUser.username,name:currentUser.name,date:cs.date,start:msToTime(cs.startTime),end:msToTime(endTime),hours:hours,type:cs.dayType||selectedType||'normal',method:'auto',note:'',approved:false};
+    var newState={username:currentUser.username,checkedIn:false};
+    entriesCol().doc(String(entry.id)).set(entry).then(function(){
+      return checkinCol().doc(currentUser.username).set(newState);
+    }).then(function(){
+      var s=ls();s.checkInState=newState;lss(s);
+      setCheckInUI(false);showToast('🚪 Udtjekket – '+hours.toFixed(2)+' timer gemt');
+    }).catch(function(){
+      showToast('⚠️ Kunne ikke gemme udtjekning – prøv igen');
+    }).finally(function(){
+      _setBtnLoading('btnOut', false);
+      _actionLock = false;
+    });
+  });
 }
 function restoreCheckIn(){var cs=loadCheckInState();setCheckInUI(cs&&cs.username===currentUser.username&&cs.checkedIn);}
 function setCheckInUI(isIn){
@@ -554,8 +593,19 @@ function saveMissed(){
   var endDate=new Date(cs.startTime);var parts=t.split(':');endDate.setHours(parseInt(parts[0]),parseInt(parts[1]),0,0);
   var hours=Math.max(0,Math.round(((endDate.getTime()-cs.startTime)/3600000)*100)/100);
   var entry={id:Date.now(),username:currentUser.username,name:currentUser.name,date:cs.date,start:msToTime(cs.startTime),end:t,hours:hours,type:cs.dayType||'normal',method:'missed-fix',note:'Rettet: glemt udtjekning',approved:false};
-  saveEntry(entry);saveCheckInState({username:currentUser.username,checkedIn:false});
-  setCheckInUI(false);document.getElementById('missedAlert').style.display='none';closeMissedModal();showToast('✅ Rettet!');
+  var newState={username:currentUser.username,checkedIn:false};
+  var btn=document.querySelector('#missedModal .btn-primary');
+  if(btn){btn.disabled=true;btn.textContent='⏳';}
+  entriesCol().doc(String(entry.id)).set(entry).then(function(){
+    return checkinCol().doc(currentUser.username).set(newState);
+  }).then(function(){
+    var s=ls();s.checkInState=newState;lss(s);
+    setCheckInUI(false);document.getElementById('missedAlert').style.display='none';closeMissedModal();showToast('✅ Rettet!');
+  }).catch(function(){
+    showToast('⚠️ Fejl – prøv igen');
+  }).finally(function(){
+    if(btn){btn.disabled=false;btn.textContent='Gem';}
+  });
 }
 function getDayHours(dateStr){
   // Fredag = 5, alle andre = 7.4
@@ -619,12 +669,16 @@ function savePeriod(){
       date:d,start:'',end:'',hours:getDayHours(d),type:type,method:'period',note:'',approved:false};
     batch.set(entriesCol().doc(String(entry.id)),entry);
   }
+  var btn=document.querySelector('#tab-manual .card:first-child .btn-primary');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Gemmer...';}
   batch.commit().then(function(){
     showToast('✅ '+toSave.length+' dage registreret!');
     document.getElementById('periodFrom').value='';
     document.getElementById('periodTo').value='';
     document.getElementById('periodPreview').style.display='none';
-  }).catch(function(){showToast('⚠️ Fejl ved gemning');});
+  }).catch(function(){showToast('⚠️ Fejl ved gemning');}).finally(function(){
+    if(btn){btn.disabled=false;btn.textContent='💾 Gem periode';}
+  });
 }
 function onManTypeChange(){
   var type=document.getElementById('manType').value;
@@ -641,6 +695,7 @@ function onManTypeChange(){
   }
 }
 function autoRegisterDay(){
+  if(_actionLock)return;
   var hours=getDayHours();
   var today=todayStr();
   var existing=entriesCache.filter(function(e){return e.date===today&&e.type===selectedType;});
@@ -650,10 +705,20 @@ function autoRegisterDay(){
     date:today,start:'',end:'',hours:hours,
     type:selectedType,method:'auto-day',note:'',approved:false
   };
-  saveEntry(entry);
-  showToast('💾 '+hours+' timer gemt!');
-  var normalBtn=document.querySelector('.daytype-btn');
-  setDayType('normal',normalBtn);
+  _actionLock=true;
+  var btn=document.getElementById('autoRegBtn');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Gemmer...';}
+  entriesCol().doc(String(entry.id)).set(entry).then(function(){
+    showToast('💾 '+hours+' timer gemt!');
+    var normalBtn=document.querySelector('.daytype-btn');
+    setDayType('normal',normalBtn);
+  }).catch(function(){
+    showToast('⚠️ Fejl – prøv igen');
+  }).finally(function(){
+    _actionLock=false;
+    if(btn){btn.disabled=false;}
+    setDayType(selectedType,document.querySelector('.daytype-btn.selected')||document.querySelector('.daytype-btn'));
+  });
 }
 function saveManual(){
   var date=document.getElementById('manDate').value;
@@ -671,10 +736,17 @@ function saveManual(){
     hours=getDayHours(date);start='';end='';
   }
   var entry={id:Date.now(),username:currentUser.username,name:currentUser.name,date:date,start:start,end:end,hours:hours,breakMin:brk,type:type,method:'manual',note:note,approved:false};
-  saveEntry(entry);
-  document.getElementById('manStart').value='';document.getElementById('manEnd').value='';
-  document.getElementById('manBreak').value='';document.getElementById('manNote').value='';
-  showToast('💾 Gemt – '+hours+' timer!');
+  var btn=document.querySelector('#tab-manual .card:last-child .btn-primary');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Gemmer...';}
+  entriesCol().doc(String(entry.id)).set(entry).then(function(){
+    document.getElementById('manStart').value='';document.getElementById('manEnd').value='';
+    document.getElementById('manBreak').value='';document.getElementById('manNote').value='';
+    showToast('💾 Gemt – '+hours+' timer!');
+  }).catch(function(){
+    showToast('⚠️ Fejl – kunne ikke gemme. Prøv igen.');
+  }).finally(function(){
+    if(btn){btn.disabled=false;btn.textContent='💾 Gem registrering';}
+  });
 }
 
 // ── Periods ───────────────────────────────────────────────
